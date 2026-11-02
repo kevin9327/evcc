@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -129,16 +130,23 @@ func (c *EcoflowPowerPulse) Enable(enable bool) error {
 	return nil
 }
 
-// MaxCurrent implements the api.Charger interface. It sets the session current,
-// not the configured maximum: lowering that while charging faults the wallbox
-// (state 9, fault 603) until it is power cycled.
+// MaxCurrent implements the api.Charger interface
 func (c *EcoflowPowerPulse) MaxCurrent(current int64) error {
-	if err := c.wb.SetCurrent(uint64(current * 10)); err != nil {
+	return c.MaxCurrentMillis(float64(current))
+}
+
+var _ api.ChargerEx = (*EcoflowPowerPulse)(nil)
+
+// MaxCurrentMillis implements the api.ChargerEx interface. It sets the session current (2/81).
+// The configured maximum (241/102) is never written: lowering it while charging faults the wallbox.
+func (c *EcoflowPowerPulse) MaxCurrentMillis(current float64) error {
+	raw := uint64(math.Round(current * 10))
+	if err := c.wb.SetCurrent(raw); err != nil {
 		return err
 	}
 
 	c.mu.Lock()
-	c.current, c.currentAt = float64(current), time.Now()
+	c.current, c.currentAt = float64(raw)/10, time.Now()
 	c.mu.Unlock()
 
 	return nil
