@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"maps"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"sync"
@@ -27,12 +28,6 @@ const brokerURL = "wss://mqtt-e.ecoflow.com:8084/mqtt"
 // probeAfter is the heartbeat gap after which a wallbox gets a get-all.
 // Heartbeats normally arrive every 60 s.
 const probeAfter = 90 * time.Second
-
-// AppKey is one (appKey, secret) pair of the EcoFlow web app. The broker only
-// accepts client IDs signed with such a pair.
-type AppKey struct {
-	Key, Secret string
-}
 
 // clientID builds a web app client ID WEB_{uuid}_{userId}_{appKey}_{ms}_{MD5}.
 func clientID(userID string, app AppKey) string {
@@ -53,14 +48,9 @@ type Connection struct {
 	wallboxes map[string]*Wallbox
 }
 
-type account struct {
-	password string
-	app      AppKey
-}
-
 type sharedConn struct {
-	conn    *Connection
-	account account
+	conn     *Connection
+	password string
 }
 
 var (
@@ -71,33 +61,37 @@ var (
 // NewConnection returns the connection of the account, logging in and
 // connecting on first use. All devices of the account share it, because
 // EcoFlow drops concurrent sessions of one account.
-func NewConnection(user, password string, app AppKey) (*Connection, error) {
+func NewConnection(user, password string) (*Connection, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	acc := account{password: password, app: app}
 	if e, ok := connections[user]; ok {
-		if e.account == acc {
+		if e.password == password {
 			return e.conn, nil
 		}
 		e.conn.client.Disconnect(250)
 		delete(connections, user)
 	}
 
-	conn, err := connect(user, acc)
+	conn, err := connect(user, password)
 	if err != nil {
 		return nil, err
 	}
 
-	connections[user] = &sharedConn{conn: conn, account: acc}
+	connections[user] = &sharedConn{conn: conn, password: password}
 	return conn, nil
 }
 
-func connect(user string, acc account) (*Connection, error) {
-	log := util.NewLogger("ecoflow").Redact(user, acc.password, base64.StdEncoding.EncodeToString([]byte(acc.password)), acc.app.Secret)
+func connect(user, password string) (*Connection, error) {
+	log := util.NewLogger("ecoflow").Redact(user, password, base64.StdEncoding.EncodeToString([]byte(password)))
 	redactSession := log.RotatingSlot()
 
-	session, err := Login(log, redactSession, user, acc.password)
+	apps, err := AppKeys()
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := Login(log, redactSession, user, password)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +103,7 @@ func connect(user string, acc account) (*Connection, error) {
 	}
 
 	setSession := func(o *paho.ClientOptions) {
-		o.SetClientID(clientID(session.UserID, acc.app))
+		o.SetClientID(clientID(session.UserID, apps[rand.IntN(len(apps))]))
 		o.SetUsername(session.Account)
 		o.SetPassword(session.Password)
 	}
@@ -126,7 +120,7 @@ func connect(user string, acc account) (*Connection, error) {
 		}).
 		// the broker rejects a reused client ID and may have expired the credentials
 		SetReconnectingHandler(func(_ paho.Client, o *paho.ClientOptions) {
-			if s, err := Login(log, redactSession, user, acc.password); err != nil {
+			if s, err := Login(log, redactSession, user, password); err != nil {
 				log.ERROR.Printf("login: %v", err)
 			} else {
 				session = s

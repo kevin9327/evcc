@@ -36,10 +36,9 @@ func init() {
 // NewEcoflowPowerPulseFromConfig creates an EcoFlow PowerPulse charger from generic config
 func NewEcoflowPowerPulseFromConfig(ctx context.Context, other map[string]any) (api.Charger, error) {
 	cc := struct {
-		User, Password    string
-		AppKey, AppSecret string
-		Serial, Gateway   string
-		Timeout           time.Duration
+		User, Password  string
+		Serial, Gateway string
+		Timeout         time.Duration
 	}{
 		Timeout: 3 * time.Minute,
 	}
@@ -56,11 +55,11 @@ func NewEcoflowPowerPulseFromConfig(ctx context.Context, other map[string]any) (
 		return nil, api.ErrMissingCredentials
 	}
 
-	if cc.AppKey == "" || cc.AppSecret == "" || cc.Serial == "" || cc.Gateway == "" {
-		return nil, errors.New("missing appkey, appsecret, serial or gateway")
+	if cc.Serial == "" || cc.Gateway == "" {
+		return nil, errors.New("missing serial or gateway")
 	}
 
-	conn, err := ecoflow.NewConnection(cc.User, cc.Password, ecoflow.AppKey{Key: cc.AppKey, Secret: cc.AppSecret})
+	conn, err := ecoflow.NewConnection(cc.User, cc.Password)
 	if err != nil {
 		return nil, err
 	}
