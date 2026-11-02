@@ -14,8 +14,8 @@ import (
 	"github.com/evcc-io/evcc/util/sponsor"
 )
 
-// ecoflowSettle is how long heartbeats may still show the state before a
-// command. On hardware a start showed after up to 44 s, a current after 40 s.
+// ecoflowSettle is how long after a command heartbeats may still show the
+// state before it. On hardware a start showed after up to 44 s, a current after 40 s.
 const ecoflowSettle = time.Minute
 
 // EcoflowPowerPulse is an EcoFlow PowerPulse wallbox behind a PowerOcean
@@ -105,7 +105,7 @@ func (c *EcoflowPowerPulse) Enabled() (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if time.Since(c.enabledAt) >= ecoflowSettle {
+	if hb.Received.Sub(c.enabledAt) >= ecoflowSettle {
 		switch {
 		case hb.State.Enabled():
 			return true, nil
@@ -137,8 +137,7 @@ func (c *EcoflowPowerPulse) MaxCurrent(current int64) error {
 
 var _ api.ChargerEx = (*EcoflowPowerPulse)(nil)
 
-// MaxCurrentMillis implements the api.ChargerEx interface. It sets the session current (2/81).
-// The configured maximum (241/102) is never written: lowering it while charging faults the wallbox.
+// MaxCurrentMillis implements the api.ChargerEx interface
 func (c *EcoflowPowerPulse) MaxCurrentMillis(current float64) error {
 	raw := uint64(math.Round(current * 10))
 	if err := c.wb.SetCurrent(raw); err != nil {
@@ -164,7 +163,7 @@ func (c *EcoflowPowerPulse) GetMaxCurrent() (float64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if hb.ChargeCurrentRaw > 0 && time.Since(c.currentAt) >= ecoflowSettle {
+	if hb.ChargeCurrentRaw > 0 && hb.Received.Sub(c.currentAt) >= ecoflowSettle {
 		return float64(hb.ChargeCurrentRaw) / 10, nil
 	}
 

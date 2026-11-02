@@ -5,6 +5,7 @@ package ecoflow
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
@@ -59,6 +60,8 @@ type Heartbeat struct {
 	Volts  []float32
 	Amps   []float32
 	Layout string
+
+	Received time.Time // set by the connection, not part of the frame
 }
 
 // String formats the heartbeat for the trace log.

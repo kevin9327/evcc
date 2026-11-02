@@ -272,8 +272,10 @@ func (wb *Wallbox) handle(payload []byte) {
 			}
 			wb.log.TRACE.Printf("%s: heartbeat %s", wb.serial, hb)
 
+			hb.Received = time.Now()
+
 			wb.mu.Lock()
-			wb.seen = time.Now()
+			wb.seen = hb.Received
 			wb.mu.Unlock()
 
 			wb.heartbeat.SetFunc(func(prev Heartbeat) Heartbeat {
